@@ -18,7 +18,7 @@ Configuration sample:
 			"platform": "Zipato",
 			"username": "[ZIPABOX LOGIN]",
 			"password": "[ZIPABOX PASSWORD]",
-			"devices": [ "scenes", "lights" ],
+			"devices": [ "lights", "meters", "sensors", "scenes", "thermostats" ],
 			"filters": [ "Relay 1", "Relay 2" ],
 			"replace": { "Schemerlampen": "Lights", "Zonweering": "Sunscreen" }
 		}
