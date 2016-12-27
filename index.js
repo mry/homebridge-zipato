@@ -5,6 +5,7 @@ var Accessory, Service, Characteristic, platform;
 
 var ZIPATO_HSLIDER = 8
 var ZIPATO_SWITCH = 11
+var ZIPATO_METER = 95
 
 module.exports = function(homebridge) {
 	console.log("homebridge API version: " + homebridge.version);
@@ -38,13 +39,28 @@ zipabox.events.OnAfterLoadDevices = function() {
 
 	// Iterate over all Zipato devices (actually module groups)
 	zipabox.ForEachDevice(function(device) {
+
+		// log device.name
+		platform.log('Device name: %s', device.name);
+		platform.log('Device: %s', JSON.stringify(device, null, 4));
+
 		// Skip all devices that is not in the configured device list
-		if(platform.config["devices"] !== undefined && platform.config["devices"].indexOf(device.name) < 0) return;
+		if(platform.config["devices"] !== undefined && platform.config["devices"].indexOf(device.name) < 0) {
+			platform.log('Skipping device: %s', device.name);
+			return;
+		}
 
 		// Iterate overall Zipato modules within a device (module group)
 		zipabox.ForEachModuleInDevice(device.name, function(uuid, module){
-			// Skip all modules that are in the configured filter list
-			if(platform.config["filters"] !== undefined && platform.config["filters"].indexOf(module.name) >= 0) return;
+
+			platform.log('Module name: %s', module.name);
+			platform.log('Module: %s', JSON.stringify(module, null, 4));
+
+			// Skip all modules that are in the configured filter list (Relay 1, Relay 2)
+			if(platform.config["filters"] !== undefined && platform.config["filters"].indexOf(module.name) >= 0) {
+				platform.log('Skipping module: %s', module.name);
+				return;
+			}
 
 			// Figure out the best way to have HomeKit handle this Zipato module
 			if(module.attributes !== undefined && typeof module.attributes[ZIPATO_HSLIDER] !== 'undefined') {
@@ -52,6 +68,16 @@ zipabox.events.OnAfterLoadDevices = function() {
 			}
 			else if(device.name == "scenes" || typeof module.attributes[ZIPATO_SWITCH] !== 'undefined') {
 				platform.addAccessory(Service.Switch, module, uuid);
+			}
+			else if(device.name == "meters" && typeof module.attributes[ZIPATO_METER] !== 'undefined') {
+				if(module.attributes[ZIPATO_METER].definition.name == "TEMPERATURE") {
+					platform.log('Adding TEMP: %s', module.name);
+					platform.addAccessory(Service.TemperatureSensor, module, uuid);
+				} else {
+					platform.log('Unknown handling of TEMP: %s', module.name);
+				}
+			} else {
+				platform.log('Unknown handling of: %s', module.name);
 			}
 		});
 	});
@@ -106,6 +132,26 @@ ZipatoPlatform.prototype.configureAccessory = function(accessory) {
 		callback();
 	});
 
+	// tempsensor
+	if (accessory.getService(Service.TemperatureSensor)) {
+		accessory.getService(Service.TemperatureSensor)
+		.getCharacteristic(Characteristic.CurrentTemperature)
+		.on('get', function(callback) {
+
+			platform.log('Getting latest value for accessory %s', accessory.displayName);
+			//platform.log('Accessory: %s', JSON.stringify(accessory, null, 4));
+
+			var tjoff = zipabox.GetDeviceByUUID(accessory.UUID);
+			platform.log('GetDeviceByUUID %s', JSON.stringify(tjoff.name, null, 2));
+			//if(tjoff.attributes[ZIPATO_METER].value === undefined) tjoff.attributes[ZIPATO_METER].value = 0;
+			//callback(null, tjoff.attributes[ZIPATO_METER].value);
+			callback(null, parseFloat(tjoff.attributes[ZIPATO_METER].value));
+			//callback(null, 77);
+
+		});
+	}
+
+	// switches
 	if (accessory.getService(Service.Switch)) {
 		accessory.getService(Service.Switch).getCharacteristic(Characteristic.On)
 			.on('set', function(value, callback) {
@@ -142,6 +188,7 @@ ZipatoPlatform.prototype.configureAccessory = function(accessory) {
 			});
 	}
 
+	// lights
 	if (accessory.getService(Service.Lightbulb)) {
 		accessory.getService(Service.Lightbulb)
 			.getCharacteristic(Characteristic.On)
